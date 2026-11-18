@@ -17,7 +17,7 @@ fake.post("/v1/chat/completions", (req, res) => {
 		choices: [
 			{
 				message: {
-					content: "<think>The user wants films like Heat.</think>\n1. Heat, 1995\n2. Collateral, 2004\n3. \"The Town\" (2010)\n- Thief, 1981\n",
+					content: "<think>The user wants films like Heat.</think>\n1. Heat, 1995\n2. Collateral, 2004\n3. \"The Town\" (2010)\n- Thief, 1981\n5. The Town, 2010\n",
 				},
 			},
 		],

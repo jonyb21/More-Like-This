@@ -266,7 +266,9 @@ async function getLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, met
 		}),
 	);
 
-	recs = recs.filter((row) => row != null);
+	// An LLM can name the same title twice (or two titles that map to one id)
+	const seen = new Set();
+	recs = recs.filter((row) => row != null && !seen.has(row.imdbId) && seen.add(row.imdbId));
 	if (recs.length > 0) {
 		await saveCache(searchImdb, type, source, recs);
 	}

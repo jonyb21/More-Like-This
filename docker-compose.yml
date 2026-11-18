@@ -11,6 +11,9 @@ services:
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_DB=${REDIS_DB:-0}
+      - PUBLIC_URL=${PUBLIC_URL:-}
+    volumes:
+      - ./data/history:/app/data/history
     depends_on:
       - redis
     restart: unless-stopped

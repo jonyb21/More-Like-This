@@ -268,4 +268,5 @@ async function catalogHandler(type, id, extra, userConfig, metadataSource) {
 
 module.exports = {
 	catalogHandler,
+	createRecCatalog,
 };

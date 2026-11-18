@@ -123,6 +123,18 @@ document.addEventListener("DOMContentLoaded", () => {
 			}
 		}
 
+		// Places in Stremio (missing in older configs = on)
+		const placeBoxes = {
+			homeRows: "placeHomeRows",
+			discoverPicker: "placeDiscoverPicker",
+			gridButton: "placeGridButton",
+			trackSeries: "placeTrackSeries",
+		};
+		for (const [key, elementId] of Object.entries(placeBoxes)) {
+			const box = document.getElementById(elementId);
+			if (box) box.checked = config.places?.[key] !== false;
+		}
+
 		const enableTitleSearchingCheckbox = document.getElementById("enableTitleSearching");
 		if (enableTitleSearchingCheckbox) {
 			if (config.enableTitleSearching) {

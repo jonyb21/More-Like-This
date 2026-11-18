@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Retry DNS lookups that time out (EAI_AGAIN) before anything connects
+require("./utils/dnsRetry").install();
+
 const { streamHandler } = require("./src/streamHandler");
 const { metaHandler } = require("./src/metaHandler");
 const { catalogHandler } = require("./src/catalogHandler");

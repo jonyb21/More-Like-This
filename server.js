@@ -90,10 +90,12 @@ async function loadUserConfig(config) {
 	try {
 		if (typeof config === "string" && decodeURIComponent(config).trim().startsWith("{")) {
 			let userConfig = JSON.parse(decodeURIComponent(config));
-			if (ENCRYPTION_KEY_INPUT) {
+			// Links made with ENCRYPTION_KEY hold {iv, authTag, data}. Links made
+			// before it was turned on hold the plain settings, and keep working.
+			const looksEncrypted = userConfig && typeof userConfig.iv === "string" && typeof userConfig.authTag === "string" && typeof userConfig.data === "string";
+			if (ENCRYPTION_KEY_INPUT && looksEncrypted) {
 				userConfig = await decryptData(userConfig);
 			}
-			// Without ENCRYPTION_KEY the config is stored as plain JSON in the URL
 			return withDefaults(userConfig);
 		}
 	} catch (err) {

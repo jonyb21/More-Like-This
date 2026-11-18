@@ -145,8 +145,12 @@ async function reasonsFor(imdbId, type, userConfig, metadataSource) {
 			return true;
 		});
 
-	out.series = take(await tmdbListToMetas(seriesList, type, apiKeys, metadataSource));
-	out.director = take(await tmdbListToMetas(makerList, type, apiKeys, metadataSource));
+	const [seriesMetas, makerMetas] = await Promise.all([
+		tmdbListToMetas(seriesList, type, apiKeys, metadataSource),
+		tmdbListToMetas(makerList, type, apiKeys, metadataSource),
+	]);
+	out.series = take(seriesMetas);
+	out.director = take(makerMetas);
 	out.similar = take(similar?.metas).slice(0, ROW_LIMIT);
 
 	if (out.series.length + out.director.length + out.similar.length > 0) {

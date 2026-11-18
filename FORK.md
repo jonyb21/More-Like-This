@@ -16,7 +16,7 @@ A recommendation source next to Gemini, for any OpenAI-compatible server (llama.
 - On the settings page: address (ending in /v1), model and key. These go into the install link, like every other key.
 - On the server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. The settings page then shows "Use the server's LLM", and the address and key never leave the server.
 
-Reasoning blocks (`<think>...</think>`), numbering and bullets are stripped from the answer. `LLM_TIMEOUT_MS` (default 60000) is how long to wait; each answer is cached per title.
+Reasoning blocks (`<think>...</think>`), numbering and bullets are stripped from the answer. `LLM_TIMEOUT_MS` (default 60000) is how long the "My LLM" row waits; each answer is cached per title. The combined row waits only `LLM_COMBINED_WAIT_MS` (default 5000, the same as the other sources): a slower answer keeps going in the background, is cached, and joins the combined row on the next search of that title. Rows that ask about the same title at the same time share one LLM request.
 
 ## How "what you opened" is known
 

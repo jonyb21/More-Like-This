@@ -235,6 +235,10 @@ async function getGeminiRecs(searchTitle, searchYear, type, searchImdb, apiKey, 
 	return recs;
 }
 
+// One LLM request per title at a time: the LLM row, the combined row and the
+// Home rows all ask at once, and a local model answers them one after another.
+const llmInFlight = new Map();
+
 async function getLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, metadataSource) {
 	if (!searchTitle || !searchImdb || !llmKey?.valid || !llmKey?.baseUrl) {
 		return null;
@@ -246,6 +250,14 @@ async function getLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, met
 		return cachedRecs;
 	}
 
+	const flightKey = `${source}|${llmKey.baseUrl}|${type}|${searchImdb}`;
+	if (llmInFlight.has(flightKey)) return llmInFlight.get(flightKey);
+	const job = fetchLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, metadataSource, source).finally(() => llmInFlight.delete(flightKey));
+	llmInFlight.set(flightKey, job);
+	return job;
+}
+
+async function fetchLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, metadataSource, source) {
 	const recTitles = await llm.getLlmRecs(searchTitle, searchYear, type, llmKey.key, llmKey.baseUrl, llmKey.model);
 	if (!recTitles || recTitles.length === 0) {
 		return null;
@@ -326,6 +338,8 @@ async function getWatchmodeRecs(searchImdb, type, apiKey, validKey) {
 	return recs;
 }
 
+const LLM_COMBINED_WAIT_MS = Number(process.env.LLM_COMBINED_WAIT_MS) || 5000;
+
 async function getCombinedRecs(searchTitle, searchYear, type, searchImdb, apiKeys, includeTmdbCollection, metadataSource, catalogSource) {
 	// Check cache for recs
 	// const cachedRecs = await checkCache(searchImdb, type, catalogSource);
@@ -355,8 +369,10 @@ async function getCombinedRecs(searchTitle, searchYear, type, searchImdb, apiKey
 		withTimeout(getWatchmodeRecs(searchImdb, type, apiKeys.watchmode.key, apiKeys.watchmode.valid), timeoutMs, "Watchmode recs timed out in combined Recs").catch(() => {
 			return [];
 		}),
-		// A local LLM can take much longer than 5 s; its answer is cached per title
-		withTimeout(getLlmRecs(searchTitle, searchYear, type, searchImdb, apiKeys.llm, metadataSource), Number(process.env.LLM_TIMEOUT_MS) || 60000, "LLM recs timed out in combined Recs").catch(() => {
+		// A local LLM can be slow. The combined row waits only a few seconds for it;
+		// the request keeps running, its answer is cached, and the next search of
+		// this title includes it. The "My LLM" row still waits for the full answer.
+		withTimeout(getLlmRecs(searchTitle, searchYear, type, searchImdb, apiKeys.llm, metadataSource), LLM_COMBINED_WAIT_MS, "LLM recs timed out in combined Recs").catch(() => {
 			return [];
 		}),
 	]);

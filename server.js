@@ -14,6 +14,14 @@ const packageJson = require("./package.json");
 const history = require("./utils/history");
 const places = require("./src/places");
 
+// An LLM set on the server (OpenAI-compatible). Installs can use it without
+// putting its key in their install link.
+const SERVER_LLM = {
+	baseUrl: process.env.LLM_BASE_URL || "",
+	key: process.env.LLM_API_KEY || "",
+	model: process.env.LLM_MODEL || "",
+};
+
 // The address Stremio uses to reach this server. PUBLIC_URL wins when set
 // (for example http://192.168.4.29:7000). Otherwise plain http is used for
 // localhost and home-network addresses, and https for everything else.
@@ -42,9 +50,10 @@ async function loadUserConfig(config) {
 			simkl: { key: "", valid: false },
 			tastedive: { key: "", valid: false },
 			rpdb: { key: "", valid: false },
+			llm: { key: "", valid: false, baseUrl: "", model: "" },
 		},
 		combineCatalogs: false,
-		catalogOrder: ["tmdb", "trakt", "simkl", "gemini", "tasteDive", "watchmode"],
+		catalogOrder: ["tmdb", "trakt", "simkl", "gemini", "llm", "tasteDive", "watchmode"],
 		metadataSource: "cinemeta",
 		language: "en",
 		streamOrder: ["detail", "app", "web", "recs"],
@@ -61,12 +70,18 @@ async function loadUserConfig(config) {
 
 	const withDefaults = (userConfig) => {
 		if (!userConfig || typeof userConfig !== "object") return defaultConfig;
-		return {
+		const merged = {
 			...defaultConfig,
 			...userConfig,
 			apiKeys: { ...defaultConfig.apiKeys, ...(userConfig.apiKeys || {}) },
 			places: { ...defaultConfig.places, ...(userConfig.places || {}) },
 		};
+		// "Use the server's LLM": the address and key come from the server's
+		// environment, so they are never written into the install link.
+		if (merged.useServerLlm && SERVER_LLM.baseUrl && !merged.apiKeys.llm?.baseUrl) {
+			merged.apiKeys = { ...merged.apiKeys, llm: { ...SERVER_LLM, valid: true, fromServer: true } };
+		}
+		return merged;
 	};
 
 	try {
@@ -105,7 +120,7 @@ async function generateManifest(apiKeys, combine, catalog_order, userConfig = nu
 				catalogs.push({
 					type: "movie",
 					id: `mlt-${source}-movie-rec`,
-					name: `${source} Recommendations`,
+					name: source === "llm" ? "My LLM Recommendations" : `${source} Recommendations`,
 					extra: [{ name: "search", isRequired: true }],
 				});
 			}
@@ -116,7 +131,7 @@ async function generateManifest(apiKeys, combine, catalog_order, userConfig = nu
 				catalogs.push({
 					type: "series",
 					id: `mlt-${source}-series-rec`,
-					name: `${source} Recommendations`,
+					name: source === "llm" ? "My LLM Recommendations" : `${source} Recommendations`,
 					extra: [{ name: "search", isRequired: true }],
 				});
 			}
@@ -188,6 +203,10 @@ async function startServer() {
 	app.get("/:userConfig/configure", async (req, res) => {
 		try {
 			let userConfig = await loadUserConfig(req.params.userConfig);
+			// Never send the server's own LLM address or key to the browser
+			if (userConfig.apiKeys?.llm?.fromServer) {
+				userConfig = { ...userConfig, apiKeys: { ...userConfig.apiKeys, llm: { key: "", valid: false, baseUrl: "", model: "" } } };
+			}
 			userConfig = encodeURIComponent(JSON.stringify(userConfig));
 			res.redirect(`/configure?data=${userConfig}`);
 		} catch (error) {
@@ -291,7 +310,7 @@ async function startServer() {
 	app.post("/saveConfig", async (req, res) => {
 		try {
 			// Build API Keys object
-			const sources = ["tmdb", "trakt", "tastedive", "gemini", "watchmode", "simkl", "rpdb"];
+			const sources = ["tmdb", "trakt", "tastedive", "gemini", "watchmode", "simkl", "rpdb", "llm"];
 			const apiKeys = {};
 
 			for (const source of sources) {
@@ -301,6 +320,15 @@ async function startServer() {
 					valid: Boolean(key),
 				};
 			}
+
+			// My LLM: an address is what makes it usable; some local servers need no key
+			const llmBaseUrl = (req.body.llmBaseUrl || "").trim();
+			apiKeys.llm = {
+				key: (req.body.llmApiKey || "").trim(),
+				baseUrl: llmBaseUrl,
+				model: (req.body.llmModel || "").trim(),
+				valid: Boolean(llmBaseUrl),
+			};
 
 			const metadataSource = req.body.metadataSource || null;
 
@@ -321,6 +349,7 @@ async function startServer() {
 				},
 				includeTmdbCollection: req.body.includeTmdbCollection === "on" || false,
 				enableTitleSearching: req.body.enableTitleSearching === "on" || false,
+				useServerLlm: req.body.useServerLlm === "on",
 				places: {
 					homeRows: req.body.placeHomeRows === "on",
 					discoverPicker: req.body.placeDiscoverPicker === "on",
@@ -328,6 +357,10 @@ async function startServer() {
 					trackSeries: req.body.placeTrackSeries === "on",
 				},
 			};
+
+			if ((config.useServerLlm || apiKeys.llm.valid) && !config.catalogOrder.includes("llm")) {
+				config.catalogOrder.push("llm");
+			}
 
 			let userConfig;
 			if (ENCRYPTION_KEY_INPUT) {
@@ -350,15 +383,19 @@ async function startServer() {
 		}
 	});
 
+	app.get("/serverLlm", (req, res) => {
+		res.json({ available: Boolean(SERVER_LLM.baseUrl), model: SERVER_LLM.model || null });
+	});
+
 	app.post("/verifyKey", async (req, res) => {
 		try {
-			const { source, key } = req.body;
+			const { source, key, baseUrl, model } = req.body;
 
-			if (!source || !key) {
-				return res.status(400).json({ valid: false, error: "Missing source or key" });
+			if (!source || (!key && source !== "llm") || (source === "llm" && !baseUrl)) {
+				return res.status(400).json({ valid: false, error: source === "llm" ? "Enter the address first" : "Missing source or key" });
 			}
 
-			const result = await validateApiKeys({ [source]: key });
+			const result = await validateApiKeys({ [source]: key || "" }, { baseUrl, model });
 			res.json(result[source]);
 		} catch (err) {
 			res.status(500).json({ valid: false, error: "Server error during validation" });

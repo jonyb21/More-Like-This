@@ -9,6 +9,15 @@ This fork adds three places where the addon's picks show up in Stremio. Each pla
 | Entry on each title page | An entry at the top of the stream list, "Open the list in Discover". It opens the picker for that title. It needs the picker catalog, so this switch keeps that catalog in the manifest. |
 | Notice series pages too | Stremio only asks for streams once an episode is picked. With this on, the addon also asks for `tt` pages and answers 404, so opening a series page counts. Put the addon below Cinemeta. |
 
+## My LLM
+
+A recommendation source next to Gemini, for any OpenAI-compatible server (llama.cpp, vLLM, Ollama, LM Studio, OpenRouter). It gets the same prompt as Gemini, gets its own "My LLM Recommendations" catalog and joins the combined list. Two ways to set it up:
+
+- On the settings page: address (ending in /v1), model and key. These go into the install link, like every other key.
+- On the server: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. The settings page then shows "Use the server's LLM", and the address and key never leave the server.
+
+Reasoning blocks (`<think>...</think>`), numbering and bullets are stripped from the answer. `LLM_TIMEOUT_MS` (default 60000) is how long to wait; each answer is cached per title.
+
 ## How "what you opened" is known
 
 The addon notes each stream request (movie pages ask for streams when they open) and, with the last switch on, each `tt` page request. It keeps the last 20 IMDb ids for each install, newest first. An install is one manifest URL, so there is no login. The ids live in one JSON file.

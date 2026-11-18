@@ -2,6 +2,7 @@ const tmdb = require("../services/tmdb");
 const trakt = require("../services/trakt");
 const simkl = require("../services/simkl");
 const gemini = require("../services/gemini");
+const llm = require("../services/llm");
 const tastedive = require("../services/tastedive");
 const watchmode = require("../services/watchmode");
 const { titleToImdb } = require("../utils/idConverter");
@@ -234,6 +235,45 @@ async function getGeminiRecs(searchTitle, searchYear, type, searchImdb, apiKey, 
 	return recs;
 }
 
+async function getLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, metadataSource) {
+	if (!searchTitle || !searchImdb || !llmKey?.valid || !llmKey?.baseUrl) {
+		return null;
+	}
+
+	const source = `llm-${llmKey.model || "default"}${llmKey.fromServer ? "-server" : ""}`;
+	const cachedRecs = await checkCache(searchImdb, type, source);
+	if (cachedRecs) {
+		return cachedRecs;
+	}
+
+	const recTitles = await llm.getLlmRecs(searchTitle, searchYear, type, llmKey.key, llmKey.baseUrl, llmKey.model);
+	if (!recTitles || recTitles.length === 0) {
+		return null;
+	}
+
+	// The prompt asks for the searched title first. Drop it when it is there;
+	// unlike Gemini, a different first line does not throw the whole list away.
+	let list = recTitles;
+	const firstImdb = await titleToImdb(list[0]?.title, list[0]?.year, type, metadataSource);
+	if (firstImdb === searchImdb) {
+		list = list.slice(1);
+	}
+
+	let recs = await Promise.all(
+		list.map(async (rec, index) => {
+			const imdbId = await titleToImdb(rec.title, rec.year, type, metadataSource);
+			return imdbId && imdbId !== searchImdb ? { imdbId: imdbId, tmdbId: null, ranking: index + 1 } : null;
+		}),
+	);
+
+	recs = recs.filter((row) => row != null);
+	if (recs.length > 0) {
+		await saveCache(searchImdb, type, source, recs);
+	}
+
+	return recs;
+}
+
 async function getWatchmodeRecs(searchImdb, type, apiKey, validKey) {
 	if (!searchImdb || searchImdb === "" || !validKey || !apiKey) {
 		return null;
@@ -294,7 +334,7 @@ async function getCombinedRecs(searchTitle, searchYear, type, searchImdb, apiKey
 	// Get recs from all sources. All sources have a timeout to prevent the whole catalog from not showing if
 	// prettier-ignore
 	const timeoutMs = 5000;
-	const [tmdbRecs, traktRecs, simklRecs, geminiRecs, tastediveRecs, watchmodeRecs] = await Promise.all([
+	const [tmdbRecs, traktRecs, simklRecs, geminiRecs, tastediveRecs, watchmodeRecs, llmRecs] = await Promise.all([
 		withTimeout(getTmdbRecs(searchImdb, type, apiKeys.tmdb.key, apiKeys.tmdb.valid, includeTmdbCollection), timeoutMs, "TMDB recs timed out in combined Recs").catch(() => {
 			return [];
 		}),
@@ -313,10 +353,14 @@ async function getCombinedRecs(searchTitle, searchYear, type, searchImdb, apiKey
 		withTimeout(getWatchmodeRecs(searchImdb, type, apiKeys.watchmode.key, apiKeys.watchmode.valid), timeoutMs, "Watchmode recs timed out in combined Recs").catch(() => {
 			return [];
 		}),
+		// A local LLM can take much longer than 5 s; its answer is cached per title
+		withTimeout(getLlmRecs(searchTitle, searchYear, type, searchImdb, apiKeys.llm, metadataSource), Number(process.env.LLM_TIMEOUT_MS) || 60000, "LLM recs timed out in combined Recs").catch(() => {
+			return [];
+		}),
 	]);
 
 	// Merge recs into one array
-	let combinedRecs = [...(tmdbRecs || []), ...(traktRecs || []), ...(simklRecs || []), ...(geminiRecs || []), ...(tastediveRecs || []), ...(watchmodeRecs || [])];
+	let combinedRecs = [...(tmdbRecs || []), ...(traktRecs || []), ...(simklRecs || []), ...(geminiRecs || []), ...(tastediveRecs || []), ...(watchmodeRecs || []), ...(llmRecs || [])];
 
 	if (!combinedRecs || combinedRecs.length === 0) {
 		logger.emptyCatalog("COMBINED: Empty catalog after merge", searchTitle);
@@ -362,5 +406,6 @@ module.exports = {
 	getTastediveRecs,
 	getGeminiRecs,
 	getWatchmodeRecs,
+	getLlmRecs,
 	getCombinedRecs,
 };

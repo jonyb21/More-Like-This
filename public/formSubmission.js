@@ -66,12 +66,12 @@ document.querySelector("form").addEventListener("submit", function (e) {
 
 // Function to make sure all inputed API Keys are validated first before submiting form
 function validateApiKeys() {
-	const sources = ["tmdb", "trakt", "gemini", "tastedive", "watchmode", "simkl", "rpdb"];
+	const sources = ["tmdb", "trakt", "gemini", "tastedive", "watchmode", "simkl", "rpdb", "llm"];
 	let allValid = true;
 
 	for (const source of sources) {
 		const input = document.getElementById(`${source}ApiKey`);
-		const apiKey = input?.value.trim();
+		const apiKey = source === "llm" ? document.getElementById("llmBaseUrl")?.value.trim() : input?.value.trim();
 		const isValid = input?.getAttribute("data-valid") === "true";
 
 		if (apiKey && !isValid) {

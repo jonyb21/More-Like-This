@@ -19,6 +19,7 @@ The addon notes each stream request (movie pages ask for streams when they open)
 | --- | --- | --- |
 | `HISTORY_FILE` | `data/history/history.json` | Where the history is kept. Mount `data/history` as a volume in Docker. |
 | `PUBLIC_URL` | (empty) | The address Stremio uses, such as `http://192.168.4.29:7000`. Without it, home-network addresses get `http` and others `https`. |
+| `ID_MAP` | (off) | `on` loads upstream's Watchmode id map (about 700 MB of memory). Off, ids are looked up through the TMDB/Watchmode APIs instead and the addon uses about 80 MB. |
 | `ENCRYPTION_KEY` | (empty) | As upstream. Without it, the config is plain JSON in the URL. This fork reads that plain config; upstream ignored it. |
 
 ## Not yet checked on a TV

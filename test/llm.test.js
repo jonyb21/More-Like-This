@@ -5,6 +5,7 @@ const express = require("express");
 
 // The fake LLM answers like a reasoning model would: a think block, numbering.
 let llmCalls = [];
+let lastBody = null;
 const fake = express();
 fake.use(express.json());
 fake.get("/v1/models", (req, res) => {
@@ -13,6 +14,7 @@ fake.get("/v1/models", (req, res) => {
 });
 fake.post("/v1/chat/completions", (req, res) => {
 	llmCalls.push({ auth: req.headers.authorization, model: req.body.model });
+	lastBody = req.body;
 	res.json({
 		choices: [
 			{
@@ -105,3 +107,12 @@ test("the settings form saves My LLM", async () => {
 	assert.strictEqual(saved.useServerLlm, true);
 	assert.deepStrictEqual(saved.catalogOrder, ["tmdb", "llm"]);
 });
+
+test("the prompt asks for different titles and discourages repeats", () => {
+	assert.ok(lastBody, "the fake LLM was called");
+	assert.strictEqual(lastBody.frequency_penalty, 0.6);
+	const user = lastBody.messages.find((m) => m.role === "user").content;
+	assert.match(user, /Do not include "Heat" itself and never repeat a title/);
+	assert.match(lastBody.messages[0].content, /"Title, Year"/);
+});
+

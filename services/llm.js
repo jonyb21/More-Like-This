@@ -1,8 +1,9 @@
 // Your own LLM as a recommendation source. Any server that speaks the
 // OpenAI chat API works (llama.cpp, vLLM, Ollama, LM Studio, OpenRouter...).
-// It gets the same prompt as Gemini and answers "Title, Year" lines.
+// It answers "Title, Year" lines. The prompt is shorter and stricter than
+// Gemini's: small local models given Gemini's prompt tend to run out of ideas
+// and repeat the searched title to fill the list.
 const fetch = require("node-fetch");
-const { getGeminiPrompt, getGeminiSystemInstructions } = require("../config");
 const { withTimeout } = require("../utils/timeout");
 const logger = require("../utils/logger");
 
@@ -42,12 +43,28 @@ function parseLlmReturn(text) {
 		.filter((r) => r.title !== "");
 }
 
-async function chat(baseUrl, apiKey, model, messages, maxTokens) {
+const LLM_REC_COUNT = Number(process.env.LLM_MAX_RESULT) || 20;
+
+function buildMessages(title, year, mediaType) {
+	const kind = mediaType === "movie" ? "movies" : "TV shows";
+	return [
+		{
+			role: "system",
+			content: `You recommend ${kind}. Reply with a plain list only: one per line, as "Title, Year". No numbering, no notes, no other text.`,
+		},
+		{
+			role: "user",
+			content: `List ${LLM_REC_COUNT} different ${kind} for someone who loved "${title}" (${year}). Match its themes, tone, story and feel. Include sequels or prequels if there are any. Do not include "${title}" itself and never repeat a title. If you cannot think of ${LLM_REC_COUNT}, list fewer.`,
+		},
+	];
+}
+
+async function chat(baseUrl, apiKey, model, messages, maxTokens, extra = {}) {
 	const response = await withTimeout(
 		fetch(`${cleanBase(baseUrl)}/chat/completions`, {
 			method: "POST",
 			headers: headers(apiKey),
-			body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxTokens }),
+			body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: maxTokens, ...extra }),
 		}),
 		LLM_TIMEOUT_MS,
 		"LLM request timed out",
@@ -75,18 +92,8 @@ async function validateAPIKey(apiKey, baseUrl, model) {
 async function getLlmRecs(title, year, mediaType, apiKey, baseUrl, model) {
 	try {
 		const cleanedTitle = title.replace(/[^\p{L}\p{N} ]/gu, "");
-		const system = await getGeminiSystemInstructions(mediaType);
-		const prompt = await getGeminiPrompt(cleanedTitle, year, mediaType);
-		const text = await chat(
-			baseUrl,
-			apiKey,
-			model,
-			[
-				{ role: "system", content: system },
-				{ role: "user", content: prompt },
-			],
-			2048,
-		);
+		// The penalty discourages the model from repeating lines
+		const text = await chat(baseUrl, apiKey, model, buildMessages(cleanedTitle, year, mediaType), 2048, { frequency_penalty: 0.6 });
 		if (!text) return null;
 		return parseLlmReturn(text);
 	} catch (error) {
@@ -95,4 +102,4 @@ async function getLlmRecs(title, year, mediaType, apiKey, baseUrl, model) {
 	}
 }
 
-module.exports = { validateAPIKey, getLlmRecs, parseLlmReturn, cleanBase };
+module.exports = { validateAPIKey, getLlmRecs, parseLlmReturn, cleanBase, buildMessages };

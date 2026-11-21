@@ -252,6 +252,40 @@ async function fetchPoster(tmdbId, mediaType, apiKey, language) {
 	}
 }
 
+// Plot, backdrop, year, rating and genres for a catalog poster, in the
+// user's language (English plot when that language has none).
+async function fetchPreviewDetails(tmdbId, mediaType, apiKey, language) {
+	if (!tmdbId || !mediaType || !apiKey) {
+		return null;
+	}
+	try {
+		const type = await getAPIEndpoint(mediaType);
+		const get = async (lang) => {
+			const url = `${TMDB_API_BASE_URL}/${type}/${tmdbId}?language=${lang}&api_key=${apiKey}`;
+			const response = await withTimeout(fetch(url), 5000, `TMDB details fetch timed out for ${tmdbId}`);
+			return response.ok ? response.json() : null;
+		};
+		let json = await get(language || "en");
+		if (json && !json.overview && language && language !== "en") {
+			const en = await get("en");
+			if (en?.overview) json = { ...json, overview: en.overview };
+		}
+		if (!json) return null;
+		const date = json.release_date || json.first_air_date || "";
+		return {
+			name: json.title || json.name || null,
+			description: json.overview || null,
+			background: json.backdrop_path ? `https://image.tmdb.org/t/p/original${json.backdrop_path}` : null,
+			releaseInfo: date ? date.slice(0, 4) : null,
+			imdbRating: json.vote_average ? json.vote_average.toFixed(1) : null,
+			genres: Array.isArray(json.genres) && json.genres.length ? json.genres.map((g) => g.name) : null,
+		};
+	} catch (error) {
+		logger.error(error.message, null);
+		return null;
+	}
+}
+
 async function fetchLogo(tmdbId, mediaType, apiKey, language) {
 	if (!tmdbId || !mediaType) {
 		return null;
@@ -476,4 +510,5 @@ module.exports = {
 	adjustMetadata,
 	fetchCollectionRecs,
 	fetchPoster,
+	fetchPreviewDetails,
 };

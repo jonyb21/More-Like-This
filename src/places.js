@@ -118,7 +118,7 @@ async function tmdbListToMetas(tmdbList, type, apiKeys, metadataSource) {
 // in the order Same series, director, Similar story.
 async function reasonsFor(imdbId, type, userConfig, metadataSource) {
 	const apiKeys = userConfig.apiKeys;
-	const cacheKey = `places:${imdbId}:${type}:${metadataSource?.source}:${metadataSource?.language}:${Object.keys(apiKeys)
+	const cacheKey = `places2:${imdbId}:${type}:${metadataSource?.source}:${metadataSource?.language}:${Object.keys(apiKeys)
 		.filter((k) => apiKeys[k]?.valid)
 		.join("+")}`;
 	const cached = await cache.getCache(cacheKey);

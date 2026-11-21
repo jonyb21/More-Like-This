@@ -2,23 +2,58 @@ const fetch = require("node-fetch");
 const { withTimeout } = require("../utils/timeout");
 const logger = require("../utils/logger");
 
-async function fetchPoster(imdbId, type) {
+// The details Stremio shows next to a focused poster (background, plot,
+// rating, year, genres) all come from the same Cinemeta request as the
+// poster. Answers are kept in memory for a day; the same titles come back
+// across searches and Home rows.
+const PREVIEW_TTL_MS = 24 * 60 * 60 * 1000;
+const PREVIEW_MAX = 5000;
+const previewCache = new Map();
+
+function previewFrom(meta) {
+	if (!meta) return null;
+	return {
+		poster: meta.poster || null,
+		background: meta.background || null,
+		logo: meta.logo || null,
+		name: meta.name || null,
+		description: meta.description || null,
+		releaseInfo: meta.releaseInfo || meta.year || null,
+		imdbRating: meta.imdbRating || null,
+		genres: Array.isArray(meta.genres) && meta.genres.length ? meta.genres : Array.isArray(meta.genre) && meta.genre.length ? meta.genre : null,
+		runtime: meta.runtime || null,
+	};
+}
+
+async function fetchPreview(imdbId, type) {
 	if (!imdbId) {
 		return null;
 	}
+	const mediaType = type === "movie" ? "movie" : "series";
+	const key = `${mediaType}:${imdbId}`;
+	const hit = previewCache.get(key);
+	if (hit && Date.now() - hit.at < PREVIEW_TTL_MS) {
+		return hit.preview;
+	}
 
 	try {
-		const mediaType = type === "movie" ? "movie" : "series";
 		const url = `https://v3-cinemeta.strem.io/meta/${mediaType}/${imdbId}.json`;
-
 		const response = await withTimeout(fetch(url), 5000, `Cinemeta poster fetch timed out: ${imdbId}`);
 		const json = await response.json();
-
-		return json?.meta?.poster || null;
+		const preview = previewFrom(json?.meta);
+		if (preview?.poster) {
+			if (previewCache.size >= PREVIEW_MAX) previewCache.delete(previewCache.keys().next().value);
+			previewCache.set(key, { at: Date.now(), preview });
+		}
+		return preview;
 	} catch (error) {
 		logger.error(error.message, null);
 		return null;
 	}
+}
+
+async function fetchPoster(imdbId, type) {
+	return (await module.exports.fetchPreview(imdbId, type))?.poster || null;
 }
 
 async function fetchBaseMetadata(imdbId, type) {
@@ -86,5 +121,7 @@ async function fetchFullMetadata(imdbId, type) {
 
 module.exports = {
 	fetchPoster,
+	fetchPreview,
+	previewFrom,
 	fetchFullMetadata,
 };

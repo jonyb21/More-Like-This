@@ -30,7 +30,7 @@ const titles = { "Heat|1995": "tt0113277", "Collateral|2004": "tt0369339", "The 
 const idConverter = require("../utils/idConverter");
 idConverter.titleToImdb = async (title, year) => titles[`${title}|${year}`] || null;
 idConverter.imdbToTitleYearType = async (id, type) => (id === "tt0113277" ? { title: "Heat", year: "1995", type } : null);
-require("../services/cinemeta").fetchPoster = async (id) => `https://img/${id}.jpg`;
+require("../services/cinemeta").fetchPreview = async (id) => ({ poster: `https://img/${id}.jpg` });
 
 let fakeServer, server, base, fakeBase;
 test.before(async () => {

@@ -108,7 +108,7 @@ async function createCatalogCacheKey(imdbId, year, type, source) {
 	const cacheYear = year || "any";
 	const cacheType = type || "any";
 
-	return `catalog:${cacheSearchKey.toLowerCase()}_${cacheYear}_${cacheType}_${source}`;
+	return `catalog2:${cacheSearchKey.toLowerCase()}_${cacheYear}_${cacheType}_${source}`;
 }
 
 /**

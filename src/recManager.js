@@ -2,6 +2,7 @@ const tmdb = require("../services/tmdb");
 const trakt = require("../services/trakt");
 const simkl = require("../services/simkl");
 const gemini = require("../services/gemini");
+const llm = require("../services/llm");
 const tastedive = require("../services/tastedive");
 const watchmode = require("../services/watchmode");
 const { titleToImdb } = require("../utils/idConverter");
@@ -234,6 +235,59 @@ async function getGeminiRecs(searchTitle, searchYear, type, searchImdb, apiKey, 
 	return recs;
 }
 
+// One LLM request per title at a time: the LLM row, the combined row and the
+// Home rows all ask at once, and a local model answers them one after another.
+const llmInFlight = new Map();
+
+async function getLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, metadataSource) {
+	if (!searchTitle || !searchImdb || !llmKey?.valid || !llmKey?.baseUrl) {
+		return null;
+	}
+
+	const source = `llm-${llmKey.model || "default"}${llmKey.fromServer ? "-server" : ""}`;
+	const cachedRecs = await checkCache(searchImdb, type, source);
+	if (cachedRecs) {
+		return cachedRecs;
+	}
+
+	const flightKey = `${source}|${llmKey.baseUrl}|${type}|${searchImdb}`;
+	if (llmInFlight.has(flightKey)) return llmInFlight.get(flightKey);
+	const job = fetchLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, metadataSource, source).finally(() => llmInFlight.delete(flightKey));
+	llmInFlight.set(flightKey, job);
+	return job;
+}
+
+async function fetchLlmRecs(searchTitle, searchYear, type, searchImdb, llmKey, metadataSource, source) {
+	const recTitles = await llm.getLlmRecs(searchTitle, searchYear, type, llmKey.key, llmKey.baseUrl, llmKey.model);
+	if (!recTitles || recTitles.length === 0) {
+		return null;
+	}
+
+	// The prompt asks for the searched title first. Drop it when it is there;
+	// unlike Gemini, a different first line does not throw the whole list away.
+	let list = recTitles;
+	const firstImdb = await titleToImdb(list[0]?.title, list[0]?.year, type, metadataSource);
+	if (firstImdb === searchImdb) {
+		list = list.slice(1);
+	}
+
+	let recs = await Promise.all(
+		list.map(async (rec, index) => {
+			const imdbId = await titleToImdb(rec.title, rec.year, type, metadataSource);
+			return imdbId && imdbId !== searchImdb ? { imdbId: imdbId, tmdbId: null, ranking: index + 1 } : null;
+		}),
+	);
+
+	// An LLM can name the same title twice (or two titles that map to one id)
+	const seen = new Set();
+	recs = recs.filter((row) => row != null && !seen.has(row.imdbId) && seen.add(row.imdbId));
+	if (recs.length > 0) {
+		await saveCache(searchImdb, type, source, recs);
+	}
+
+	return recs;
+}
+
 async function getWatchmodeRecs(searchImdb, type, apiKey, validKey) {
 	if (!searchImdb || searchImdb === "" || !validKey || !apiKey) {
 		return null;
@@ -284,6 +338,8 @@ async function getWatchmodeRecs(searchImdb, type, apiKey, validKey) {
 	return recs;
 }
 
+const LLM_COMBINED_WAIT_MS = Number(process.env.LLM_COMBINED_WAIT_MS) || 5000;
+
 async function getCombinedRecs(searchTitle, searchYear, type, searchImdb, apiKeys, includeTmdbCollection, metadataSource, catalogSource) {
 	// Check cache for recs
 	// const cachedRecs = await checkCache(searchImdb, type, catalogSource);
@@ -294,7 +350,7 @@ async function getCombinedRecs(searchTitle, searchYear, type, searchImdb, apiKey
 	// Get recs from all sources. All sources have a timeout to prevent the whole catalog from not showing if
 	// prettier-ignore
 	const timeoutMs = 5000;
-	const [tmdbRecs, traktRecs, simklRecs, geminiRecs, tastediveRecs, watchmodeRecs] = await Promise.all([
+	const [tmdbRecs, traktRecs, simklRecs, geminiRecs, tastediveRecs, watchmodeRecs, llmRecs] = await Promise.all([
 		withTimeout(getTmdbRecs(searchImdb, type, apiKeys.tmdb.key, apiKeys.tmdb.valid, includeTmdbCollection), timeoutMs, "TMDB recs timed out in combined Recs").catch(() => {
 			return [];
 		}),
@@ -313,10 +369,16 @@ async function getCombinedRecs(searchTitle, searchYear, type, searchImdb, apiKey
 		withTimeout(getWatchmodeRecs(searchImdb, type, apiKeys.watchmode.key, apiKeys.watchmode.valid), timeoutMs, "Watchmode recs timed out in combined Recs").catch(() => {
 			return [];
 		}),
+		// A local LLM can be slow. The combined row waits only a few seconds for it;
+		// the request keeps running, its answer is cached, and the next search of
+		// this title includes it. The "My LLM" row still waits for the full answer.
+		withTimeout(getLlmRecs(searchTitle, searchYear, type, searchImdb, apiKeys.llm, metadataSource), LLM_COMBINED_WAIT_MS, "LLM recs timed out in combined Recs").catch(() => {
+			return [];
+		}),
 	]);
 
 	// Merge recs into one array
-	let combinedRecs = [...(tmdbRecs || []), ...(traktRecs || []), ...(simklRecs || []), ...(geminiRecs || []), ...(tastediveRecs || []), ...(watchmodeRecs || [])];
+	let combinedRecs = [...(tmdbRecs || []), ...(traktRecs || []), ...(simklRecs || []), ...(geminiRecs || []), ...(tastediveRecs || []), ...(watchmodeRecs || []), ...(llmRecs || [])];
 
 	if (!combinedRecs || combinedRecs.length === 0) {
 		logger.emptyCatalog("COMBINED: Empty catalog after merge", searchTitle);
@@ -362,5 +424,6 @@ module.exports = {
 	getTastediveRecs,
 	getGeminiRecs,
 	getWatchmodeRecs,
+	getLlmRecs,
 	getCombinedRecs,
 };

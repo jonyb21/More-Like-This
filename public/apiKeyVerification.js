@@ -17,9 +17,10 @@ async function verifyApiKey(source) {
 	input.removeAttribute("data-valid");
 	valid.value = "false";
 
-	// Basic validation
-	if (!apiKey) {
-		status.textContent = "Please enter a key.";
+	// Basic validation (My LLM may have no key; it needs an address)
+	const llmBase = source === "llm" ? document.getElementById("llmBaseUrl").value.trim() : "";
+	if (source === "llm" ? !llmBase : !apiKey) {
+		status.textContent = source === "llm" ? "Please enter the address." : "Please enter a key.";
 		status.classList.add("error");
 		return;
 	}
@@ -33,7 +34,7 @@ async function verifyApiKey(source) {
 		const res = await fetch("/verifyKey", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ source, key: apiKey }),
+			body: JSON.stringify(source === "llm" ? { source, key: apiKey, baseUrl: llmBase, model: document.getElementById("llmModel").value.trim() } : { source, key: apiKey }),
 		});
 
 		const data = await res.json();
@@ -42,7 +43,7 @@ async function verifyApiKey(source) {
 			// UI feedback
 			button.classList.add("success");
 			status.classList.add("success");
-			status.textContent = "Valid key!";
+			status.textContent = source === "llm" ? "Connected!" : "Valid key!";
 
 			// Backend valid flags
 			valid.value = "true";
@@ -61,7 +62,7 @@ async function verifyApiKey(source) {
 }
 
 function setupValidationReset() {
-	const sources = ["tmdb", "trakt", "gemini", "tastedive", "watchmode", "rpdb"];
+	const sources = ["tmdb", "trakt", "gemini", "tastedive", "watchmode", "rpdb", "llm"];
 
 	sources.forEach((source) => {
 		const input = document.getElementById(`${source}ApiKey`);
@@ -87,3 +88,22 @@ function setupValidationReset() {
 }
 
 setupValidationReset();
+
+// Changing the LLM address or model needs a new check too
+["llmBaseUrl", "llmModel"].forEach((id) => {
+	const el = document.getElementById(id);
+	const key = document.getElementById("llmApiKey");
+	if (el && key) el.addEventListener("input", () => key.dispatchEvent(new Event("input")));
+});
+
+// Show "Use the server's LLM" only when this server has one
+fetch("/serverLlm")
+	.then((r) => r.json())
+	.then((info) => {
+		if (!info.available) return;
+		document.getElementById("serverLlmGroup").hidden = false;
+		if (info.model) document.getElementById("serverLlmModel").textContent = ` (${info.model})`;
+		const box = document.getElementById("useServerLlm");
+		if (window.userConfig?.useServerLlm !== false) box.checked = true;
+	})
+	.catch(() => {});

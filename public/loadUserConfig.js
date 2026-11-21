@@ -19,6 +19,18 @@ document.addEventListener("DOMContentLoaded", () => {
 			if (rpdbInput) rpdbInput.value = config.apiKeys.rpdb?.key || "";
 			if (watchmodeInput) watchmodeInput.value = config.apiKeys.watchmode?.key || "";
 			if (simklInput) simklInput.value = config.apiKeys.simkl?.key || "";
+
+			// My LLM (a server LLM is never written back into the page)
+			if (!config.useServerLlm) {
+				const llm = config.apiKeys.llm || {};
+				const set = (id, v) => {
+					const el = document.getElementById(id);
+					if (el) el.value = v || "";
+				};
+				set("llmBaseUrl", llm.baseUrl);
+				set("llmModel", llm.model);
+				set("llmApiKey", llm.key);
+			}
 		}
 
 		const includeTmdbCollectionCheckbox = document.getElementById("includeTmdbCollection");
@@ -121,6 +133,18 @@ document.addEventListener("DOMContentLoaded", () => {
 			if (recsCheckbox) {
 				recsCheckbox.checked = !!config.enabledStreamButtons.recs;
 			}
+		}
+
+		// Places in Stremio (missing in older configs = on)
+		const placeBoxes = {
+			homeRows: "placeHomeRows",
+			discoverPicker: "placeDiscoverPicker",
+			gridButton: "placeGridButton",
+			trackSeries: "placeTrackSeries",
+		};
+		for (const [key, elementId] of Object.entries(placeBoxes)) {
+			const box = document.getElementById(elementId);
+			if (box) box.checked = config.places?.[key] !== false;
 		}
 
 		const enableTitleSearchingCheckbox = document.getElementById("enableTitleSearching");

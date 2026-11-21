@@ -43,6 +43,11 @@ async function generateCatalogSource(id, apiKeys, userConfig, metadataSource) {
 		catalogSource = catalogSource + "-collection";
 	}
 
+	// Different LLMs give different lists, so they must not share a cache entry
+	if (catalogSource.includes("llm") && apiKeys.llm?.valid) {
+		catalogSource = catalogSource + `-m:${apiKeys.llm.model || "default"}${apiKeys.llm.fromServer ? ":server" : ""}`;
+	}
+
 	if (metadataSource?.source) {
 		catalogSource = catalogSource + `-${metadataSource.source}`;
 	}
@@ -215,6 +220,8 @@ async function catalogHandler(type, id, extra, userConfig, metadataSource) {
 				recs = await recManager.getTastediveRecs(title, year, type, searchImdb, apiKeys.tastedive.key, apiKeys.tastedive.valid, metadataSource);
 			} else if (id.includes("watchmode")) {
 				recs = await recManager.getWatchmodeRecs(searchImdb, type, apiKeys.watchmode.key, apiKeys.watchmode.valid);
+			} else if (id.startsWith("mlt-llm-")) {
+				recs = await recManager.getLlmRecs(title, year, type, searchImdb, apiKeys.llm, metadataSource);
 			} else {
 				recs = [];
 			}
@@ -233,6 +240,8 @@ async function catalogHandler(type, id, extra, userConfig, metadataSource) {
 				recs = await recManager.getTastediveRecs(title, year, type, searchImdb, apiKeys.tastedive.key, apiKeys.tastedive.valid, metadataSource);
 			} else if (id.includes("watchmode")) {
 				recs = await recManager.getWatchmodeRecs(searchImdb, type, apiKeys.watchmode.key, apiKeys.watchmode.valid);
+			} else if (id.startsWith("mlt-llm-")) {
+				recs = await recManager.getLlmRecs(title, year, type, searchImdb, apiKeys.llm, metadataSource);
 			} else {
 				recs = [];
 			}
@@ -268,4 +277,5 @@ async function catalogHandler(type, id, extra, userConfig, metadataSource) {
 
 module.exports = {
 	catalogHandler,
+	createRecCatalog,
 };

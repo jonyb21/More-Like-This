@@ -77,6 +77,44 @@
 						<div id="gemini-verify-status" class="verify-status"></div>
 					</div>
 
+					<div class="section-header">My LLM</div>
+
+					<div class="toggle-group" id="serverLlmGroup" hidden>
+						<div class="toggle-info">
+							<span class="toggle-label">Use the server's LLM<span id="serverLlmModel"></span></span>
+							<div class="tooltip-container">
+								<div class="tooltip-icon">?</div>
+								<div class="tooltip-text">This server has its own LLM set up. Its address and key stay on the server and are never put in your install link.</div>
+							</div>
+						</div>
+						<label class="toggle">
+							<input type="checkbox" id="useServerLlm" name="useServerLlm" />
+							<span class="toggle-slider"></span>
+						</label>
+					</div>
+
+					<div class="form-group">
+						<label for="llmBaseUrl">LLM Address</label>
+						<p class="key-help">Any OpenAI-compatible server, such as llama.cpp, Ollama, LM Studio or OpenRouter. Ends in /v1. Works alongside Gemini.</p>
+						<input type="text" id="llmBaseUrl" name="llmBaseUrl" placeholder="http://192.168.1.10:8080/v1" />
+					</div>
+
+					<div class="form-group">
+						<label for="llmModel">LLM Model</label>
+						<input type="text" id="llmModel" name="llmModel" placeholder="Model name, as your server lists it" />
+					</div>
+
+					<div class="form-group">
+						<label for="llmApiKey">LLM API Key</label>
+						<p class="key-help">Leave empty if your server needs no key. Verify checks the address, model and key together.</p>
+						<div class="input-with-verify">
+							<input type="text" id="llmApiKey" name="llmApiKey" placeholder="Enter your LLM key" />
+							<button type="button" class="verify-btn" onclick="verifyApiKey('llm')">Verify Key</button>
+							<input type="hidden" name="validatedLlmApiKey" id="validatedLlmApiKey" />
+						</div>
+						<div id="llm-verify-status" class="verify-status"></div>
+					</div>
+
 					<div class="form-group">
 						<label for="tastediveApiKey">TasteDive API Key</label>
 						<p class="key-help">Get your free TasteDive key <a href="https://tastedive.com/account/api_access" target="_blank">here</a></p>
@@ -108,6 +146,64 @@
 							<input type="hidden" name="validatedSimklApiKey" id="validatedSimklApiKey" />
 						</div>
 						<div id="simkl-verify-status" class="verify-status"></div>
+					</div>
+
+					<div class="section-header">Places in Stremio</div>
+
+					<div class="toggle-group">
+						<div class="toggle-info">
+							<span class="toggle-label">Rows on Home</span>
+							<div class="tooltip-container">
+								<div class="tooltip-icon">?</div>
+								<div class="tooltip-text">Three rows on the Home screen about the title you opened last: Same series, More from the director, Similar story. Same series and the director row need a TMDB key.</div>
+							</div>
+						</div>
+						<label class="toggle">
+							<input type="checkbox" id="placeHomeRows" name="placeHomeRows" checked />
+							<span class="toggle-slider"></span>
+						</label>
+					</div>
+
+					<div class="toggle-group">
+						<div class="toggle-info">
+							<span class="toggle-label">Picker in Discover</span>
+							<div class="tooltip-container">
+								<div class="tooltip-icon">?</div>
+								<div class="tooltip-text">A More Like This catalog in Discover. Its drop-down picks one of the last five titles you opened.</div>
+							</div>
+						</div>
+						<label class="toggle">
+							<input type="checkbox" id="placeDiscoverPicker" name="placeDiscoverPicker" checked />
+							<span class="toggle-slider"></span>
+						</label>
+					</div>
+
+					<div class="toggle-group">
+						<div class="toggle-info">
+							<span class="toggle-label">Entry on each title page</span>
+							<div class="tooltip-container">
+								<div class="tooltip-icon">?</div>
+								<div class="tooltip-text">An entry in the stream list that opens that title's list in Discover.</div>
+							</div>
+						</div>
+						<label class="toggle">
+							<input type="checkbox" id="placeGridButton" name="placeGridButton" checked />
+							<span class="toggle-slider"></span>
+						</label>
+					</div>
+
+					<div class="toggle-group">
+						<div class="toggle-info">
+							<span class="toggle-label">Notice series pages too</span>
+							<div class="tooltip-container">
+								<div class="tooltip-icon">?</div>
+								<div class="tooltip-text">Stremio only asks addons about a series once you pick an episode. With this on, opening a series page counts too. Put this addon below Cinemeta in your addon list.</div>
+							</div>
+						</div>
+						<label class="toggle">
+							<input type="checkbox" id="placeTrackSeries" name="placeTrackSeries" checked />
+							<span class="toggle-slider"></span>
+						</label>
 					</div>
 
 					<div class="section-header">Catalog Settings</div>
@@ -150,6 +246,10 @@
 							<div id="gemini-catalog" class="catalog-item conditional-setting hidden" data-conditional="geminiApiKey" data-show-if="not-empty" data-value="gemini">
 								<span class="catalog-icon">≡</span>
 								<span class="catalog-name">Gemini AI</span>
+							</div>
+							<div id="llm-catalog" class="catalog-item conditional-setting hidden" data-conditional="llmBaseUrl" data-show-if="not-empty" data-value="llm">
+								<span class="catalog-icon">≡</span>
+								<span class="catalog-name">My LLM</span>
 							</div>
 							<div id="tastedive-catalog" class="catalog-item conditional-setting hidden" data-conditional="tastediveApiKey" data-show-if="not-empty" data-value="tastedive">
 								<span class="catalog-icon">≡</span>

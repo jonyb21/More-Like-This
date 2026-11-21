@@ -2,7 +2,6 @@ const tmdb = require("../services/tmdb");
 const rpdb = require("../services/rpdb");
 const cinemeta = require("../services/cinemeta");
 const idConverter = require("../utils/idConverter");
-const { generateFullMeta } = require("./metadata");
 
 async function createMetaPreview(recs, type, apiKeys, metadataSource) {
 	const imdbId = recs.imdbId;
@@ -15,56 +14,47 @@ async function createMetaPreview(recs, type, apiKeys, metadataSource) {
 		rpdbPoster = await rpdb.getRPDBPoster(imdbId, rpdbApi.key);
 	}
 
-	//const meta = await generateFullMeta(imdbId, type, metadataSource);
-	const meta = null;
+	// Stremio shows these next to the focused poster (background, plot,
+	// rating, year, genres), so every poster carries them, not just a picture.
+	const details = (meta, poster) =>
+		Object.fromEntries(
+			Object.entries({
+				background: meta?.background || poster,
+				logo: meta?.logo,
+				name: meta?.name,
+				description: meta?.description,
+				releaseInfo: meta?.releaseInfo,
+				imdbRating: meta?.imdbRating,
+				genres: meta?.genres,
+				runtime: meta?.runtime,
+			}).filter(([, v]) => v != null && v !== ""),
+		);
 
 	if (metadataSource.source === "cinemeta") {
-		const poster = rpdbPoster || (await cinemeta.fetchPoster(imdbId, type));
+		const preview = await cinemeta.fetchPreview(imdbId, type);
+		const poster = rpdbPoster || preview?.poster;
 
-		return poster
-			? {
-					id: imdbId,
-					type: type,
-					poster: poster,
-					background: meta?.background || poster,
-					name: meta?.name,
-					releaseInfo: meta?.releaseInfo,
-					description: meta?.description,
-					imdbRating: meta?.imdbRating,
-			  }
-			: null;
+		return poster ? { id: imdbId, type: type, poster: poster, ...details(preview, poster) } : null;
 	} else if (metadataSource.source === "tmdb") {
-		// If no rpdbPoster, fetch TMDB poster
-		let poster = rpdbPoster;
-		if (!poster) {
-			const keepEnglishPoster = metadataSource.keepEnglishPosters;
-			const language = keepEnglishPoster ? "en" : metadataSource.language;
+		const keepEnglishPoster = metadataSource.keepEnglishPosters;
+		const language = keepEnglishPoster ? "en" : metadataSource.language;
 
-			if (!tmdbId) {
-				tmdbId = await idConverter.imdbToTmdb(imdbId, type, apiKeys.tmdb.key);
-			}
-
-			let tmdbPoster = await tmdb.fetchPoster(tmdbId, type, apiKeys.tmdb.key, language);
-
-			// If poster not available in desired language, default to english posters
-			if (!tmdbPoster) {
-				tmdbPoster = await tmdb.fetchPoster(tmdbId, type, apiKeys.tmdb.key, "en");
-			}
-
-			poster = tmdbPoster;
+		if (!tmdbId) {
+			tmdbId = await idConverter.imdbToTmdb(imdbId, type, apiKeys.tmdb.key);
 		}
 
-		return poster
-			? {
-					id: "mlt-meta-" + imdbId,
-					type: type,
-					poster: poster,
-					background: meta?.background || poster,
-					name: meta?.name,
-					releaseInfo: meta?.year,
-					description: meta?.description,
-			  }
-			: null;
+		const [tmdbPoster, info] = await Promise.all([
+			rpdbPoster ? null : tmdb.fetchPoster(tmdbId, type, apiKeys.tmdb.key, language),
+			tmdb.fetchPreviewDetails(tmdbId, type, apiKeys.tmdb.key, metadataSource.language),
+		]);
+
+		// If poster not available in desired language, default to english posters
+		let poster = rpdbPoster || tmdbPoster;
+		if (!poster) {
+			poster = await tmdb.fetchPoster(tmdbId, type, apiKeys.tmdb.key, "en");
+		}
+
+		return poster ? { id: "mlt-meta-" + imdbId, type: type, poster: poster, ...details(info, poster) } : null;
 	}
 }
 

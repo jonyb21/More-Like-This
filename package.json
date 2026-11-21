@@ -5,7 +5,10 @@
 	"author": "rama1997",
 	"license": "ISC",
 	"main": "addon.js",
-	"scripts": {},
+	"scripts": {
+		"start": "node server.js",
+		"test": "node --test test/*.test.js"
+	},
 	"dependencies": {
 		"@google/generative-ai": "^0.22.0",
 		"cors": "^2.8.5",
